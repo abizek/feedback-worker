@@ -1,32 +1,60 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+	BOT_TOKEN: string;
+	TELEGRAM_CHAT_ID: string;
 }
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
+	async fetch(request: Request, env: Env): Promise<Response> {
+		async function handleOptions(request: Request) {
+			const corsHeaders = {
+				'Access-Control-Allow-Origin': '*',
+				'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
+				'Access-Control-Max-Age': '86400',
+			};
+
+			if (
+				request.headers.get('Origin') !== null &&
+				request.headers.get('Access-Control-Request-Method') !== null &&
+				request.headers.get('Access-Control-Request-Headers') !== null
+			) {
+				// Handle CORS preflight requests.
+				return new Response(null, {
+					headers: {
+						...corsHeaders,
+						'Access-Control-Allow-Headers': request.headers.get('Access-Control-Request-Headers') as string,
+					},
+				});
+			} else {
+				// Handle standard OPTIONS request.
+				return new Response(null, {
+					headers: {
+						Allow: 'GET, HEAD, POST, OPTIONS',
+					},
+				});
+			}
+		}
+
+		if (request.method.toUpperCase() === 'OPTIONS') {
+			return handleOptions(request);
+		}
+
+		if (request.method.toUpperCase() !== 'POST') {
+			return new Response(null, { status: 405, statusText: 'Method Not Allowed' });
+		}
+
+		const { text } = await request.json<{ text: string }>();
+		if (!text) {
+			return new Response('Empty text', { status: 400 });
+		}
+
+		try {
+			let response = await fetch(`https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage?chat_id=${env.TELEGRAM_CHAT_ID}&text=${text}`);
+			response = new Response(response.statusText, response);
+			response.headers.set('Access-Control-Allow-Origin', '*');
+			return response;
+		} catch (error) {
+			console.log(error);
+			return new Response('Unable to send feedback', { status: 500 });
+		}
 	},
 };
